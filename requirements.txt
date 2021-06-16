@@ -1,1 +1,4 @@
+ds-ctcdecoder==0.9.3
+numpy==1.17.3
+progressbar==2.5
 tqdm==4.61.1

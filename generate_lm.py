@@ -1,5 +1,6 @@
 import argparse
 import gzip
+import importlib
 import io
 import os
 import sys
@@ -7,6 +8,21 @@ import subprocess
 from collections import Counter
 
 from tqdm import tqdm
+from ds_ctcdecoder import Alphabet
+
+
+def get_validate_label(args):
+    if 'validate_label_locale' not in args or (args.validate_label_locale is None):
+        print('ERROR: Required --validate_label_locale not specified. Please check.')
+        return None
+    if not os.path.exists(os.path.abspath(args.validate_label_locale)):
+        print('ERROR: Inexistent --validate_label_locale specified. Please check.')
+        return None
+    module_dir = os.path.abspath(os.path.dirname(args.validate_label_locale))
+    sys.path.insert(1, module_dir)
+    fname = os.path.basename(args.validate_label_locale).replace('.py', '')
+    locale_module = importlib.import_module(fname, package=None)
+    return locale_module.validate_label
 
 
 def convert_and_filter_topk(args):
@@ -18,6 +34,10 @@ def convert_and_filter_topk(args):
 
     print("\nConverting to lowercase and counting word occurrences ...")
     if not os.path.exists(data_lower):
+        validate_label = get_validate_label(args)
+        ALPHABET = Alphabet(
+            args.filter_alphabet) if args.filter_alphabet else None
+
         with io.TextIOWrapper(
             io.BufferedWriter(gzip.open(data_lower, "w+")), encoding="utf-8"
         ) as file_out:
@@ -33,8 +53,13 @@ def convert_and_filter_topk(args):
 
             for line in tqdm(file_in):
                 line_lower = line.lower()
-                counter.update(line_lower.split())
-                file_out.write(line_lower)
+                validated_label = validate_label(line_lower)
+                if ALPHABET and validated_label and not ALPHABET.CanEncode(validated_label):
+                    validated_label = None
+
+                if validated_label:
+                    counter.update(validated_label.split())
+                    file_out.write(f"{validated_label}\n")
 
             file_in.close()
     else:
@@ -72,7 +97,7 @@ def convert_and_filter_topk(args):
         for i, (w, c) in enumerate(reversed(top_counter)):
             if c > last_count:
                 print(
-                    "  The first word with {c} occurrences is \"{w}\" at place {len(top_counter) - 1 - i}"
+                    f"  The first word with {c} occurrences is \"{w}\" at place {len(top_counter) - 1 - i}"
                 )
                 break
     else:
@@ -220,6 +245,18 @@ def main():
         "--discount_fallback",
         help="To try when such message is returned by kenlm: 'Could not calculate Kneser-Ney discounts [...] rerun with --discount_fallback'",
         action="store_true",
+    )
+    parser.add_argument(
+        "--validate_label_locale",
+        help="Path to a Python file defining a |validate_label| function for your locale.",
+        required=False,
+        default="normalitza.py"
+    )
+    parser.add_argument(
+        "--filter_alphabet",
+        help="Exclude samples with characters not in provided alphabet",
+        required=False,
+        default="alfabet.txt"
     )
 
     args = parser.parse_args()
