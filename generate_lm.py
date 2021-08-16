@@ -112,7 +112,7 @@ def convert_and_filter_topk(args):
 def build_lm(args, data_lower):
     print("\nCreating ARPA file ...")
     lm_path = os.path.join(
-        args.output_dir, f"{args.input_txt}_lm_{args.arpa_order}_{args.arpa_prune}.arpa")
+        args.output_dir, f"{args.input_txt}_lm_{args.arpa_order}_{args.arpa_prune.replace('|', '_')}.arpa")
     subargs = [
         os.path.join(args.kenlm_bins, "lmplz"),
         "--order",
